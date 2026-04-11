@@ -1,0 +1,10 @@
+name = "ideas-tracker"
+main = "src/worker.js"
+compatibility_date = "2025-09-27"
+
+routes = [{ pattern = "ideas.akshaydhenge.uk/*", zone_name = "akshaydhenge.uk" }]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ideas-tracker"
+database_id = "538cec1a-5e6f-4d2d-9ffb-bb0aaf058274"
