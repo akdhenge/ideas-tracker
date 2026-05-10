@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚛️ The Idea Reactor — Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #080c14; --surface: #0f1623; --surface2: #161d2e; --surface3: #1c2540;
+      --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
+      --text: #e2e8f0; --muted: #64748b; --muted2: #94a3b8;
+      --eureka: #f59e0b; --tinker: #6366f1; --alive: #10b981;
+      --mono: 'JetBrains Mono', monospace; --sans: 'Inter', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; position: relative; }
+
+    /* Video background */
+    #bg-video {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover; z-index: 0; pointer-events: none;
+    }
+    #bg-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background:
+        radial-gradient(ellipse at 10% 0%, rgba(99,102,241,0.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 90% 100%, rgba(16,185,129,0.08) 0%, transparent 50%),
+        linear-gradient(to bottom, rgba(8,12,20,0.72) 0%, rgba(8,12,20,0.60) 100%);
+      z-index: 1; pointer-events: none;
+    }
+    nav, .board, footer, .modal-backdrop, #toast-area { position: relative; z-index: 2; }
+
+    /* Nav */
+    nav {
+      background: rgba(15,22,35,0.75); border-bottom: 1px solid var(--border);
+      padding: 0 20px; display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100; height: 56px;
+      backdrop-filter: blur(12px); gap: 12px;
+    }
+    .nav-brand { display: flex; align-items: baseline; gap: 10px; }
+    .nav-logo { font-size: 1.2rem; }
+    .nav-title { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.3px; }
+    .nav-sub { color: var(--muted); font-size: 0.7rem; font-family: var(--mono); }
+    .nav-right { display: flex; align-items: center; gap: 8px; }
+    button { cursor: pointer; border: none; font-family: var(--sans); transition: all 0.15s; border-radius: 8px; }
+    .btn-spark {
+      background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white;
+      padding: 8px 16px; font-size: 0.82rem; font-weight: 700;
+      box-shadow: 0 2px 12px rgba(99,102,241,0.3);
+    }
+    .btn-spark:hover { transform: translateY(-1px); }
+    .btn-ghost { background: transparent; color: var(--muted); padding: 7px 12px; font-size: 0.8rem; border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--border2); }
+    .idea-count { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; }
+
+    /* Board */
+    .board { display: flex; gap: 16px; padding: 20px 16px; align-items: flex-start; min-height: calc(100vh - 56px - 48px); }
+    .column { flex: 1 1 0; min-width: 0; background: rgba(15,22,35,0.7); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; backdrop-filter: blur(8px); }
+    .col-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--border); position: relative; }
+    .col-head::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 14px 14px 0 0; }
+    .col-eureka .col-head::before { background: linear-gradient(90deg, var(--eureka), #fbbf24); }
+    .col-tinker .col-head::before { background: linear-gradient(90deg, var(--tinker), #818cf8); }
+    .col-alive  .col-head::before { background: linear-gradient(90deg, var(--alive), #34d399); }
+    .col-head-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .col-title { font-size: 0.88rem; font-weight: 700; display: flex; align-items: center; gap: 7px; }
+    .col-count { font-family: var(--mono); font-size: 0.68rem; background: var(--surface2); color: var(--muted2); padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); }
+    .col-desc { font-size: 0.7rem; color: var(--muted); line-height: 1.5; font-style: italic; }
+    .cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+
+    /* Sample cards */
+    .card { background: rgba(22,29,46,0.85); border: 1px solid var(--border); border-radius: 10px; padding: 13px; transition: border-color 0.15s, box-shadow 0.15s; backdrop-filter: blur(4px); }
+    .card:hover { border-color: var(--border2); box-shadow: 0 4px 20px rgba(0,0,0,0.3); transform: translateY(-1px); }
+    .card-title { font-size: 0.88rem; font-weight: 600; margin-bottom: 5px; }
+    .card-cat { font-size: 0.67rem; font-family: var(--mono); color: var(--muted); background: var(--surface3); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; display: inline-block; }
+
+    footer { text-align: center; padding: 14px; color: #1e2d45; font-size: 0.68rem; border-top: 1px solid var(--border); font-family: var(--mono); }
+
+    /* Preview label */
+    .preview-badge {
+      position: fixed; bottom: 1rem; right: 1rem; z-index: 999;
+      background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3);
+      color: #fbbf24; font-family: var(--mono); font-size: 0.68rem;
+      padding: 4px 10px; border-radius: 6px; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<video id="bg-video" autoplay muted loop playsinline>
+  <source src="snowman.mp4" type="video/mp4">
+</video>
+<div id="bg-overlay"></div>
+
+<nav>
+  <div class="nav-brand">
+    <span class="nav-logo">⚛️</span>
+    <span class="nav-title">The Idea Reactor</span>
+    <span class="nav-sub">// ideas.akshaydhenge.uk</span>
+  </div>
+  <div class="nav-right">
+    <span class="idea-count">3 ideas in the reactor</span>
+    <button class="btn-spark">⚡ Spark</button>
+    <button class="btn-ghost">↩</button>
+  </div>
+</nav>
+
+<div class="board">
+  <div class="column col-eureka">
+    <div class="col-head">
+      <div class="col-head-top">
+        <div class="col-title">💡 Eureka</div>
+        <div class="col-count">1</div>
+      </div>
+      <div class="col-desc">The spark. The 3am thought. The "nobody has ever thought of this" moment — they have, but still.</div>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-title">Smart mirror with stock alerts</div>
+        <span class="card-cat">Hardware</span>
+      </div>
+    </div>
+  </div>
+  <div class="column col-tinker">
+    <div class="col-head">
+      <div class="col-head-top">
+        <div class="col-title">🧪 Tinkering</div>
+        <div class="col-count">1</div>
+      </div>
+      <div class="col-desc">Currently being overengineered. Feature creep is likely. Scope: expanding.</div>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-title">Snowman video background</div>
+        <span class="card-cat">UI/UX</span>
+      </div>
+    </div>
+  </div>
+  <div class="column col-alive">
+    <div class="col-head">
+      <div class="col-head-top">
+        <div class="col-title">🚀 Alive</div>
+        <div class="col-count">1</div>
+      </div>
+      <div class="col-desc">Shipped. Deployed. Surprisingly still running.</div>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-title">Stonks Monitor</div>
+        <span class="card-cat">Finance</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>⚛️ The Idea Reactor &bull; ideas.akshaydhenge.uk</footer>
+
+<div class="preview-badge">PREVIEW MODE — not deployed</div>
+
+</body>
+</html>

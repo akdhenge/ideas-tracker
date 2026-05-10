@@ -1,3 +1,4 @@
 .wrangler/
 .claude/
 node_modules/
+/resource/snowman.mp4

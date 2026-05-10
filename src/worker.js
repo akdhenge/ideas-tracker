@@ -69,9 +69,10 @@ async function handleAPI(request, env, url) {
     const body = await request.json();
     const { title, category, notes, link, stage } = body;
     if (!title?.trim()) return json({ error: 'Title is required. Even "untitled idea #47" counts.' }, 400);
+    const { priority } = body;
     const { results } = await env.DB.prepare(
-      'INSERT INTO ideas (title, category, notes, link, stage) VALUES (?, ?, ?, ?, ?) RETURNING *'
-    ).bind(title.trim(), category || 'New Project', notes || '', link || '', stage || 'eureka').all();
+      'INSERT INTO ideas (title, category, notes, link, stage, priority) VALUES (?, ?, ?, ?, ?, ?) RETURNING *'
+    ).bind(title.trim(), category || 'New Project', notes || '', link || '', stage || 'eureka', priority || 'med').all();
     return json(results[0], 201);
   }
 
@@ -86,6 +87,7 @@ async function handleAPI(request, env, url) {
     if (body.notes !== undefined) { fields.push('notes = ?'); values.push(body.notes); }
     if (body.link !== undefined) { fields.push('link = ?'); values.push(body.link); }
     if (body.stage !== undefined) { fields.push('stage = ?'); values.push(body.stage); }
+    if (body.priority !== undefined) { fields.push('priority = ?'); values.push(body.priority); }
     if (!fields.length) return json({ error: 'Nothing to update. Bold request though.' }, 400);
     fields.push('updated_at = CURRENT_TIMESTAMP');
     values.push(id);
@@ -857,9 +859,33 @@ function appHTML() {
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      background-image:
-        radial-gradient(ellipse at 10% 0%, rgba(99,102,241,0.08) 0%, transparent 50%),
-        radial-gradient(ellipse at 90% 100%, rgba(16,185,129,0.05) 0%, transparent 50%);
+      position: relative;
+    }
+
+    /* ── Video background ── */
+    #bg-video {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      pointer-events: none;
+    }
+    #bg-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background:
+        radial-gradient(ellipse at 10% 0%, rgba(99,102,241,0.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 90% 100%, rgba(16,185,129,0.08) 0%, transparent 50%),
+        linear-gradient(to bottom, rgba(8,12,20,0.72) 0%, rgba(8,12,20,0.60) 100%);
+      z-index: 1;
+      pointer-events: none;
+    }
+    /* Ensure all content sits above the video */
+    nav, .board, footer, .modal-backdrop, #toast-area {
+      position: relative;
+      z-index: 2;
     }
 
     /* ── Nav ── */
@@ -1060,6 +1086,41 @@ function appHTML() {
     }
     .btn-nuke:hover { color: var(--danger); border-color: rgba(239,68,68,0.3); }
 
+    /* ── Priority dots ── */
+    .priority-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+    .priority-high  { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+    .priority-med   { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.4); }
+    .priority-low   { background: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,0.35); }
+
+    /* ── Collapse / expand on hover ── */
+    .card-body {
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.25s ease, opacity 0.2s ease;
+      pointer-events: none;
+    }
+    .card:hover .card-body,
+    .card:focus-within .card-body {
+      max-height: 300px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .card-head { margin-bottom: 0; }
+    .card:hover .card-head,
+    .card:focus-within .card-head { margin-bottom: 7px; }
+
+    /* ── Strikethrough for alive ── */
+    .card-done .card-title {
+      text-decoration: line-through;
+      opacity: 0.55;
+    }
+
     /* ── Empty states ── */
     .empty { text-align: center; padding: 32px 16px; }
     .empty-icon { font-size: 2rem; margin-bottom: 10px; opacity: 0.5; }
@@ -1170,6 +1231,11 @@ function appHTML() {
 </head>
 <body>
 
+<video id="bg-video" autoplay muted loop playsinline>
+  <source src="https://pub-dc9e5f28cee54c0894e40bad5b19cab1.r2.dev/snowman.mp4" type="video/mp4">
+</video>
+<div id="bg-overlay"></div>
+
 <nav>
   <div class="nav-brand">
     <span class="nav-logo">⚛️</span>
@@ -1244,6 +1310,14 @@ function appHTML() {
         <option value="eureka">💡 Eureka — just born</option>
         <option value="tinker">🧪 Tinkering — in progress</option>
         <option value="alive">🚀 It's Alive! — shipped</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>PRIORITY</label>
+      <select id="f-priority">
+        <option value="high">🔴 High — do this now</option>
+        <option value="med" selected>🟡 Medium — eventually</option>
+        <option value="low">🔵 Low — someday maybe</option>
       </select>
     </div>
     <div class="form-group">
@@ -1379,19 +1453,24 @@ function cardHTML(idea) {
   const si = STAGES.indexOf(idea.stage);
   const badgeCls = BADGE[idea.category] || 'badge-project';
   const badgeShort = BADGE_SHORT[idea.category] || 'project';
-  return '<div class="card" data-id="' + idea.id + '">' +
+  const pri = idea.priority || 'med';
+  const doneCls = idea.stage === 'alive' ? ' card-done' : '';
+  return '<div class="card' + doneCls + '" data-id="' + idea.id + '">' +
     '<div class="card-head">' +
+      '<div class="priority-dot priority-' + pri + '" title="' + pri + ' priority"></div>' +
       '<div class="card-title">' + esc(idea.title) + '</div>' +
       '<span class="badge ' + badgeCls + '">' + badgeShort + '</span>' +
     '</div>' +
-    (idea.notes ? '<div class="card-notes">' + esc(idea.notes) + '</div>' : '') +
-    (idea.link ? '<div class="card-link"><a href="' + esc(idea.link) + '" target="_blank" rel="noopener">↗ ' + esc(shortUrl(idea.link)) + '</a></div>' : '') +
-    '<div class="card-foot">' +
-      '<span class="card-age">' + relTime(idea.created_at) + '</span>' +
-      (si > 0 ? '<button class="btn-card" onclick="move(' + idea.id + ',-1)">← back</button>' : '') +
-      (si < STAGES.length-1 ? '<button class="btn-card" onclick="move(' + idea.id + ',1)">next →</button>' : '') +
-      '<button class="btn-card" onclick="editIdea(' + idea.id + ')">edit</button>' +
-      '<button class="btn-nuke" onclick="nuke(' + idea.id + ')" title="Delete">✕</button>' +
+    '<div class="card-body">' +
+      (idea.notes ? '<div class="card-notes">' + esc(idea.notes) + '</div>' : '') +
+      (idea.link ? '<div class="card-link"><a href="' + esc(idea.link) + '" target="_blank" rel="noopener">↗ ' + esc(shortUrl(idea.link)) + '</a></div>' : '') +
+      '<div class="card-foot">' +
+        '<span class="card-age">' + relTime(idea.created_at) + '</span>' +
+        (si > 0 ? '<button class="btn-card" onclick="move(' + idea.id + ',-1)">← back</button>' : '') +
+        (si < STAGES.length-1 ? '<button class="btn-card" onclick="move(' + idea.id + ',1)">next →</button>' : '') +
+        '<button class="btn-card" onclick="editIdea(' + idea.id + ')">edit</button>' +
+        '<button class="btn-nuke" onclick="nuke(' + idea.id + ')" title="Delete">✕</button>' +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -1400,8 +1479,10 @@ function render() {
   const total = ideas.length;
   document.getElementById('total-count').textContent = total + ' idea' + (total === 1 ? '' : 's') + ' in the reactor';
 
+  const PRI_ORDER = { high: 0, med: 1, low: 2 };
   for (const stage of STAGES) {
-    const mine = ideas.filter(i => i.stage === stage);
+    const mine = ideas.filter(i => i.stage === stage)
+      .sort((a, b) => (PRI_ORDER[a.priority || 'med'] ?? 1) - (PRI_ORDER[b.priority || 'med'] ?? 1));
     const colId = stage === 'tinkering' ? 'tinker' : stage;
     document.getElementById('count-' + colId).textContent = mine.length;
     const el = document.getElementById('cards-' + colId);
@@ -1446,6 +1527,7 @@ function openModal(stage) {
   document.getElementById('f-title').value = '';
   document.getElementById('f-category').value = 'New Project';
   document.getElementById('f-stage').value = stage || 'eureka';
+  document.getElementById('f-priority').value = 'med';
   document.getElementById('f-notes').value = '';
   document.getElementById('f-link').value = '';
   document.getElementById('btn-del').style.display = 'none';
@@ -1461,6 +1543,7 @@ function editIdea(id) {
   document.getElementById('f-title').value = idea.title;
   document.getElementById('f-category').value = idea.category;
   document.getElementById('f-stage').value = idea.stage;
+  document.getElementById('f-priority').value = idea.priority || 'med';
   document.getElementById('f-notes').value = idea.notes || '';
   document.getElementById('f-link').value = idea.link || '';
   document.getElementById('btn-del').style.display = 'inline-block';
@@ -1477,6 +1560,7 @@ function saveIdea() {
     title,
     category: document.getElementById('f-category').value,
     stage:    document.getElementById('f-stage').value,
+    priority: document.getElementById('f-priority').value,
     notes:    document.getElementById('f-notes').value.trim(),
     link:     document.getElementById('f-link').value.trim(),
   };
@@ -1580,16 +1664,16 @@ async function commitChanges() {
     for (const idea of ideas.filter(i => i.id < 0)) {
       const r = await fetch('/api/ideas', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: idea.title, category: idea.category, notes: idea.notes, link: idea.link, stage: idea.stage })
+        body: JSON.stringify({ title: idea.title, category: idea.category, notes: idea.notes, link: idea.link, stage: idea.stage, priority: idea.priority || 'med' })
       });
       if (r.ok) idea.id = (await r.json()).id;
     }
     for (const idea of ideas.filter(i => i.id > 0)) {
       const s = serverIdeas.find(x => x.id === idea.id);
-      if (s && ['stage','title','category','notes','link'].some(k => idea[k] !== s[k]))
+      if (s && ['stage','title','category','notes','link','priority'].some(k => idea[k] !== s[k]))
         await fetch('/api/ideas/' + idea.id, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: idea.title, category: idea.category, notes: idea.notes, link: idea.link, stage: idea.stage })
+          body: JSON.stringify({ title: idea.title, category: idea.category, notes: idea.notes, link: idea.link, stage: idea.stage, priority: idea.priority || 'med' })
         });
     }
     serverIdeas = JSON.parse(JSON.stringify(ideas));
